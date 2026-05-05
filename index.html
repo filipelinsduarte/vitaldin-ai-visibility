@@ -412,7 +412,7 @@ function renderOverview(){
   var compMax=compData[0]||1;
   var compItems=top8.map(function(c){
     var cd=COMP_DOMAINS[c.name]||(c.name.toLowerCase().replace(/\s/g,'')+'.com');
-    return {icon:cd,label:c.name,val:c.mentions,sub:c.mentions+' mentions'};
+    return {icon:cd,label:c.name,val:c.mentions,sub:c.mentions+(activeModel!=='all'?' total mentions':' mentions')};
   });
   /* top domain items */
   var topDom=((mc&&mc.topDomains)||cit.topDomains).slice(0,8);
@@ -424,7 +424,7 @@ function renderOverview(){
   el.innerHTML=
     '<div class="two-col" style="margin-bottom:14px">'+
       '<div class="cc"><div class="cc-head"><div class="cc-title">Model Coverage</div><div class="cc-sub">prompts triggering a brand mention per AI model</div></div><div class="cc-body"><div class="ov-bar-wrap">'+ovBars(covItems,covMax,'ov-indigo')+'</div></div></div>'+
-      '<div class="cc"><div class="cc-head"><div class="cc-title">Competitor Mentions</div><div class="cc-sub">'+(activeModel!=='all'?(MODEL_META[activeModel]||{label:activeModel}).label+' · ':'')+'top 8 by mention count</div></div><div class="cc-body"><div class="ov-bar-wrap">'+ovBars(compItems,compMax,'ov-green')+'</div></div></div>'+
+      '<div class="cc"><div class="cc-head"><div class="cc-title">Competitor Mentions</div><div class="cc-sub">'+(activeModel!=='all'?(MODEL_META[activeModel]||{label:activeModel}).label+' · counts across all models':'top 8 by mention count')+'</div></div><div class="cc-body"><div class="ov-bar-wrap">'+ovBars(compItems,compMax,'ov-green')+'</div></div></div>'+
     '</div>'+
     '<div class="two-col" style="margin-bottom:14px">'+
       '<div class="cc"><div class="cc-head"><div class="cc-title">Sentiment Breakdown</div><div class="cc-sub">'+sMentions.length+' brand mention'+(sMentions.length!==1?'s':'')+' analysed</div></div><div class="cc-body" style="height:210px;position:relative"><canvas id="ov-sent"></canvas></div></div>'+
@@ -620,7 +620,11 @@ function applyPromptFilter(){
 function renderSentiment(){
   var bk=BRAND_CFG[currentBrand].key,s=D.sentiment[bk];
   var mentions=activeModel==='all'?s.mentions:s.mentions.filter(function(m){return m.model===activeModel;});
-  var tiles=[{cls:'spos',num:s.positive,lbl:'Positive'},{cls:'sneu',num:s.neutral,lbl:'Neutral'},{cls:'sneg',num:s.negative,lbl:'Negative'},{cls:'sunc',num:s.uncertain,lbl:'Uncertain'}].map(function(t){return '<div class="sent-tile '+t.cls+'"><div class="st-num">'+t.num+'</div><div class="st-lbl">'+t.lbl+'</div></div>';}).join('');
+  var tileCounts=activeModel==='all'
+    ?{positive:s.positive||0,neutral:s.neutral||0,negative:s.negative||0,uncertain:s.uncertain||0}
+    :{positive:0,neutral:0,negative:0,uncertain:0};
+  if(activeModel!=='all')mentions.forEach(function(m){if(tileCounts.hasOwnProperty(m.sentiment))tileCounts[m.sentiment]++;});
+  var tiles=[{cls:'spos',num:tileCounts.positive,lbl:'Positive'},{cls:'sneu',num:tileCounts.neutral,lbl:'Neutral'},{cls:'sneg',num:tileCounts.negative,lbl:'Negative'},{cls:'sunc',num:tileCounts.uncertain,lbl:'Uncertain'}].map(function(t){return '<div class="sent-tile '+t.cls+'"><div class="st-num">'+t.num+'</div><div class="st-lbl">'+t.lbl+'</div></div>';}).join('');
   var el=document.getElementById('sentContent');
   if(s.total_mentions===0){el.innerHTML='<div class="sent-tiles">'+tiles+'</div><div class="cc"><div class="cc-body"><div class="no-data"><div class="no-data-icon">&#128202;</div><h3>No mentions detected</h3><p>'+BRAND_CFG[currentBrand].name+' was not mentioned in any of the 30 tracked prompts across 5 AI models. See the Actions tab for steps to achieve first mentions.</p></div></div></div>';return;}
   if(!mentions.length){el.innerHTML='<div class="sent-tiles">'+tiles+'</div><div class="cc"><div class="cc-body"><div class="no-data"><div class="no-data-icon">&#128269;</div><h3>No mentions for '+(MODEL_META[activeModel]||{label:activeModel}).label+'</h3><p>Switch to "All models" or try Sonar.</p></div></div></div>';return;}
@@ -645,7 +649,7 @@ function renderCompetitors(){
     var sdotCls=c.topSentiment==='positive'?'sdot-pos':c.topSentiment==='negative'?'sdot-neg':'sdot-neu';
     return '<div class="comp-row"><div class="comp-rank">'+(i+1)+'</div><img class="comp-fav" src="'+fav(cd)+'" onerror="this.style.display=\'none\'"><div class="comp-name">'+c.name+'</div><div class="comp-bar-wrap"><div class="comp-bar" style="width:'+pct+'%"></div></div><div class="comp-count">'+c.mentions+' mentions</div><div class="comp-score">avg '+c.avgScore+'</div><div class="sdot '+sdotCls+'" title="'+c.topSentiment+'"></div></div>';
   }).join('')||'<p style="color:var(--ink4);font-size:13px">No competitors for this filter.</p>';
-  document.getElementById('compSub').textContent=comps.length+' competitors detected'+(activeModel!=='all'?' for '+(MODEL_META[activeModel]||{label:activeModel}).label:'');
+  document.getElementById('compSub').textContent=comps.length+' competitors detected'+(activeModel!=='all'?' for '+(MODEL_META[activeModel]||{label:activeModel}).label+' · counts are totals across all models':'');
   var top3=comps.slice(0,3);
   document.getElementById('compInsight').innerHTML=top3.length?
     '<div style="margin-bottom:14px"><div class="act-sect-label">Dominant competitors</div><p style="font-size:13px;color:var(--ink2);line-height:1.7;margin-top:6px"><b>'+top3[0].name+'</b> leads with '+top3[0].mentions+' AI mentions at an average score of '+top3[0].avgScore+'.'+(top3[1]?' '+top3[1].name+' ('+top3[1].mentions+' mentions) and '+(top3[2]?top3[2].name+' ('+top3[2].mentions+')':'')+'follow.':'')+'</p></div><div><div class="act-sect-label">By sentiment</div><div style="margin-top:8px;display:flex;flex-direction:column;gap:7px">'+comps.slice(0,7).map(function(c){var cd=COMP_DOMAINS[c.name]||(c.name.toLowerCase().replace(/\s/g,'')+'.com');var col=c.topSentiment==='positive'?'#16a34a':c.topSentiment==='negative'?'#dc2626':'#64748b';return '<div style="display:flex;align-items:center;gap:8px;font-size:12px"><img src="'+fav(cd)+'" style="width:14px;height:14px;border-radius:3px;border:1px solid var(--border)" onerror="this.style.display=\'none\'"><span style="flex:1;color:var(--ink)">'+c.name+'</span><span style="color:'+col+';font-weight:600;font-size:11px">'+c.topSentiment+'</span><span style="color:var(--ink4)">avg '+c.avgScore+'</span></div>';}).join('')+'</div></div>':
