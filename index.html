@@ -620,6 +620,7 @@ function renderPrompts(){
 function onPromptSearch(q){searchQuery=q;applyPromptFilter();}
 function setPromptFilter(f,btn){promptFilter=f;document.querySelectorAll('.filter-bar .fb-btn').forEach(x=>x.classList.remove('active'));btn.classList.add('active');applyPromptFilter();}
 function applyPromptFilter(){
+  var bk=BRAND_CFG[currentBrand].key;
   var data=_pd.slice();
   if(searchQuery)data=data.filter(function(p){return p.text.toLowerCase().indexOf(searchQuery.toLowerCase())>-1;});
   if(promptFilter==='mentioned')data=data.filter(function(p){return activeModel==='all'?p.mentions>0:(p.models[activeModel]&&p.models[activeModel].mentioned);});
