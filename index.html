@@ -232,6 +232,12 @@ tr.dom-row-open .dom-chev{transform:rotate(180deg)}
   .wrap,.header,.model-bar,.subnav{padding-left:14px;padding-right:14px}
 }
 @media(max-width:480px){.stat-row,.sent-tiles,.act-grid{grid-template-columns:1fr}}
+.comp-icons{display:flex;gap:3px;align-items:center}
+.comp-iw{position:relative;display:inline-flex;cursor:default}
+.comp-iw img{width:22px;height:22px;border-radius:4px;border:1.5px solid var(--border);background:var(--bg2)}
+.comp-itip{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;font-size:11px;line-height:1.45;padding:5px 8px;border-radius:6px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s;z-index:30}
+.comp-iw:hover .comp-itip{opacity:1}
+.comp-itip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:4px solid transparent;border-top-color:#1e293b}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-YV8FCLN403"></script>
@@ -298,6 +304,7 @@ tr.dom-row-open .dom-chev{transform:rotate(180deg)}
         <th class="pt-sort" onclick="setSortCol('position')" id="th-position">Avg Position<span class="sort-arr" id="sa-position">&#8597;</span></th>
         <th class="pt-sort" onclick="setSortCol('sentiment')" id="th-sentiment">Sentiment<span class="sort-arr" id="sa-sentiment">&#8597;</span></th>
         <th>Models</th>
+        <th>Top Competitors</th>
       </tr></thead><tbody id="promptsTbody"></tbody></table>
     </div>
   </div>
@@ -619,7 +626,7 @@ function applyPromptFilter(){
   if(promptFilter==='not')data=data.filter(function(p){return activeModel==='all'?p.mentions===0:!(p.models[activeModel]&&p.models[activeModel].mentioned);});
   data=sortPrompts(data);
   var tbody=document.getElementById('promptsTbody');
-  if(!data.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--ink4)">No prompts match filter</td></tr>';return;}
+  if(!data.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--ink4)">No prompts match filter</td></tr>';return;}
   tbody.innerHTML=data.map(function(p){
     /* visibility */
     var visBadge,mentionedModels;
@@ -670,11 +677,39 @@ function applyPromptFilter(){
     var dots=MODEL_ORDER.map(function(mk){
       var mv=p.models[mk];var m=MODEL_META[mk]||{domain:'google.com',label:mk};
       var hit=mv&&mv.mentioned;
+      var isActive=activeModel!=='all'&&activeModel===mk;
       var tip=m.label+': '+(hit?'Mentioned (score '+(mv.score||0)+', rank '+(mv.rank||'none')+')':'Not mentioned');
-      var isActive=activeModel!=='all'&&mk===activeModel;
-      return '<div class="mdot-wrap" data-tip="'+tip+'"><img class="mdot-img'+(hit?'':' mdot-miss')+'" style="'+(isActive?'outline:2px solid var(--v);outline-offset:1px':'')+'" src="'+fav(m.domain)+'" onerror="this.src=\'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==\'"></div>';
+      var extraStyle=isActive?'outline:2px solid var(--v);outline-offset:1px;border-radius:4px;':'';
+      return '<div class="mdot-wrap" data-tip="'+tip+'"><img class="mdot-img'+(hit?'':' mdot-miss')+'" src="'+fav(m.domain)+'" style="'+extraStyle+'" onerror="this.src=\'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==\'"></div>';
     }).join('');
-    return '<tr><td><div class="pt-text">'+p.text+'</div></td><td>'+visBadge+'</td><td>'+posBadge+'</td><td>'+sentBadge+'</td><td><div class="model-dots">'+dots+'</div></td></tr>';
+    /* top competitors: per-prompt if available, else top for selected model */
+    var pComps=[];
+    if(activeModel!=='all'){
+      var mr4=p.models[activeModel];
+      if(mr4&&mr4.competitors&&mr4.competitors.length){pComps=mr4.competitors.slice(0,3);}
+    } else {
+      MODEL_ORDER.forEach(function(mk){
+        var mv=p.models[mk];
+        if(mv&&mv.competitors){mv.competitors.forEach(function(pc){var found=pComps.find(function(x){return x.name===pc.name;});if(found){found._cnt=(found._cnt||1)+1;}else{pComps.push(Object.assign({},pc,{_cnt:1}));}});}
+      });
+      pComps.sort(function(a,b){return(b._cnt||1)-(a._cnt||1);});
+      pComps=pComps.slice(0,3);
+    }
+    if(!pComps.length){
+      var aggC=(D.competitors[bk]||[]).filter(function(c){return!c.isBrand;});
+      if(activeModel!=='all'){aggC=aggC.filter(function(c){return c.modelMentions&&(c.modelMentions[activeModel]||0)>0;}).sort(function(a,b){return(b.modelMentions[activeModel]||0)-(a.modelMentions[activeModel]||0);});}
+      pComps=aggC.slice(0,3).map(function(c){var cnt=activeModel==='all'?c.mentions:(c.modelMentions&&c.modelMentions[activeModel]||0);return{name:c.name,_aggCount:cnt};});
+    }
+    var compIcons=pComps.map(function(pc){
+      var cd=COMP_DOMAINS[pc.name]||(pc.name.toLowerCase().replace(/\s+/g,'')+'.com');
+      var tipLines=[pc.name];
+      if(pc.rank)tipLines.push('Rank #'+pc.rank);
+      if(pc.score)tipLines.push('Score '+pc.score);
+      if(pc._aggCount!=null)tipLines.push(pc._aggCount+' mention'+(pc._aggCount!==1?'s':'')+(activeModel!=='all'?' in '+(MODEL_META[activeModel]||{label:activeModel}).label:''));
+      return '<div class="comp-iw"><img src="'+fav(cd)+'" onerror="this.style.display=\'none\'"><div class="comp-itip">'+tipLines.join(' · ')+'</div></div>';
+    }).join('');
+    if(!compIcons)compIcons='<span style="color:var(--ink4);font-size:11px">-</span>';
+    return '<tr><td><div class="pt-text">'+p.text+'</div></td><td>'+visBadge+'</td><td>'+posBadge+'</td><td>'+sentBadge+'</td><td><div class="model-dots">'+dots+'</div></td><td><div class="comp-icons">'+compIcons+'</div></td></tr>';
   }).join('');
 }
 /* sentiment */
